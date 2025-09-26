@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 HEIC画像をPNG画像に変換するプログラム
-実行したディレクトリ内のすべてのHEIC画像をPNG形式に変換します。
+実行したディレクトリ内のすべてのHEIC画像をPNG形式に変換し、
+最大長を700px以下にリサイズします。
 """
 
 import os
@@ -11,17 +13,48 @@ from PIL import Image
 import pillow_heif
 from tqdm import tqdm
 
-def convert_heic_to_png(input_path, output_path):
+def resize_image_if_needed(img, max_size=700):
     """
-    HEIC画像をPNG画像に変換する関数
+    画像の最大長が指定サイズ以下になるようリサイズする関数
+    
+    Args:
+        img (PIL.Image): リサイズ対象の画像
+        max_size (int): 最大長のピクセル数（デフォルト700）
+        
+    Returns:
+        PIL.Image: リサイズされた画像
+    """
+    width, height = img.size
+    max_dimension = max(width, height)
+    
+    if max_dimension <= max_size:
+        return img
+    
+    # アスペクト比を保持してリサイズ
+    if width > height:
+        new_width = max_size
+        new_height = int(height * max_size / width)
+    else:
+        new_height = max_size
+        new_width = int(width * max_size / height)
+    
+    resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    return resized_img
+
+def convert_heic_to_png(input_path, output_path, max_size=700):
+    """
+    HEIC画像をPNG画像に変換する関数（リサイズ機能付き）
     
     Args:
         input_path (str): 入力HEICファイルのパス
         output_path (str): 出力PNGファイルのパス
+        max_size (int): 最大長のピクセル数（デフォルト700）
     """
     try:
         # HEICファイルを開く
         with Image.open(input_path) as img:
+            original_size = img.size
+            
             # PNGは透明度を保持できるので、RGBAモードを維持
             if img.mode == 'P':
                 # パレットモードの場合はRGBAに変換
@@ -30,9 +63,18 @@ def convert_heic_to_png(input_path, output_path):
                 # その他のモードはRGBAに変換
                 img = img.convert('RGBA')
             
+            # 必要に応じてリサイズ
+            img = resize_image_if_needed(img, max_size)
+            new_size = img.size
+            
             # PNGとして保存（透明度を保持）
             img.save(output_path, 'PNG', optimize=True)
-            tqdm.write(f"変換完了: {input_path} -> {output_path}")
+            
+            # リサイズ情報を表示
+            if original_size != new_size:
+                tqdm.write(f"変換完了: {input_path} -> {output_path} (リサイズ: {original_size[0]}x{original_size[1]} -> {new_size[0]}x{new_size[1]})")
+            else:
+                tqdm.write(f"変換完了: {input_path} -> {output_path}")
             return True
             
     except Exception as e:
@@ -78,8 +120,7 @@ def main():
     
     # 変換処理
     success_count = 0
-    for heic_file in tqdm(heic_files, desc="HEIC→PNG変換中", unit="ファイル"):
-        # 出力ファイル名を生成（拡張子を.pngに変更）
+    for heic_file in tqdm(heic_files, desc="HEIC_PNG変換中", unit="files"):
         png_file = heic_file.with_suffix('.png')
         
         # 既にPNGファイルが存在する場合はスキップ
@@ -87,8 +128,8 @@ def main():
             tqdm.write(f"スキップ: {png_file} は既に存在します")
             continue
         
-        # 変換実行
-        if convert_heic_to_png(str(heic_file), str(png_file).replace("HEIC/", "")):
+        # 変換実行（最大長700px以下にリサイズ）
+        if convert_heic_to_png(str(heic_file), str(png_file).replace("HEIC/", ""), max_size=700):
             success_count += 1
     
     print(f"\n変換完了: {success_count}/{len(heic_files)} ファイルが正常に変換されました。")

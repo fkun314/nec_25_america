@@ -4,6 +4,9 @@ import torch
 import matplotlib.pyplot as plt
 import numpy as np
 import japanize_matplotlib
+import glob
+import os
+
 
 device = "cuda:0"
 ckpt = "allenai/MolmoAct-7B-D-0812"
@@ -25,7 +28,6 @@ model = AutoModelForImageTextToText.from_pretrained(
     trust_remote_code=True,
     torch_dtype=torch.bfloat16,  # より軽量なデータ型を使用
     device_map={"": device},
-    low_cpu_mem_usage=True,  # CPUメモリ使用量を削減
 )
 
 # ==== 画像リサイズ関数 ====
@@ -139,20 +141,32 @@ def analyze_trace_statistics(trace):
     
     return stats, actual_trace
 
-# ==== 写真を3枚ロードしてリサイズ ====
-img_wide1 = Image.open("scripts/img/IMG_7522.png").convert("RGB")
+
+# scripts/img/ ディレクトリ内のPNGファイルを更新日時でソートし、最新の3枚を取得
+img_dir = "scripts/img/"
+img_files = sorted(
+    glob.glob(os.path.join(img_dir, "*.png")),
+    key=os.path.getmtime,
+    reverse=True
+)[:3]
+
+if len(img_files) < 3:
+    raise ValueError("画像が3枚未満です。")
+
+# 最新の3枚をロードしてリサイズ
+img_wide1 = Image.open(img_files[0]).convert("RGB")
 img_wide1 = resize_image(img_wide1, max_size=512)
 
-img_wide2 = Image.open("scripts/img/IMG_7523.png").convert("RGB")
+img_wide2 = Image.open(img_files[1]).convert("RGB")
 img_wide2 = resize_image(img_wide2, max_size=512)
 
-img_wrist = Image.open("scripts/img/IMG_7524.png").convert("RGB")
+img_wrist = Image.open(img_files[2]).convert("RGB")
 img_wrist = resize_image(img_wrist, max_size=512)
 
 print(f"Resized image sizes: {img_wide1.size}, {img_wide2.size}, {img_wrist.size}")
 
 # ==== 英語プロンプト ====
-instruction = "press the red button"
+instruction = "bring up the game controller"
 prompt = (
     f"The task is {instruction}. "
     "What is the action that the robot should take. "
@@ -218,17 +232,17 @@ for key, value in stats.items():
 print("\nGenerating visualization images...")
 
 # 最初の画像（wide1）に軌道を重ねて表示
-fig1 = visualize_trace_on_image(img_wide1, trace, "Visual Reasoning Trace - Press Red Button Task")
+fig1 = visualize_trace_on_image(img_wide1, trace, "Visual Reasoning Trace - {} Task".format(instruction))
 fig1.savefig('/home/hfujita/molmoact/scripts/trace_visualization_wide1.png', dpi=300, bbox_inches='tight')
 print("Trajectory visualization saved: trace_visualization_wide1.png")
 
 # 2つ目の画像（wide2）にも表示
-fig2 = visualize_trace_on_image(img_wide2, trace, "Visual Reasoning Trace - Second Camera View")
+fig2 = visualize_trace_on_image(img_wide2, trace, "Visual Reasoning Trace - Second Camera View - {} Task".format(instruction))
 fig2.savefig('/home/hfujita/molmoact/scripts/trace_visualization_wide2.png', dpi=300, bbox_inches='tight')
 print("Trajectory visualization saved: trace_visualization_wide2.png")
 
 # 3つ目の画像（wrist）にも表示
-fig3 = visualize_trace_on_image(img_wrist, trace, "Visual Reasoning Trace - Wrist Camera View")
+fig3 = visualize_trace_on_image(img_wrist, trace, "Visual Reasoning Trace - Wrist Camera View - {} Task".format(instruction))
 fig3.savefig('/home/hfujita/molmoact/scripts/trace_visualization_wrist.png', dpi=300, bbox_inches='tight')
 print("Trajectory visualization saved: trace_visualization_wrist.png")
 
